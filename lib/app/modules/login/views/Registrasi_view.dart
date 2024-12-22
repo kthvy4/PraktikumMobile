@@ -121,7 +121,7 @@ class _RegisterViewState extends State<RegisterView> {
                       ),
                       child: Text(
                         'REGISTER',
-                        style: TextStyle(color: Colors.white),
+                        style: TextStyle(color: const Color.fromARGB(255, 28, 28, 28)),
                       ),
                     ),
               SizedBox(height: 20),

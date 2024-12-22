@@ -1,4 +1,5 @@
-import 'package:demo_mobile/app/modules/Halaman_Utama/Halaman_Utama.dart';
+import 'package:demo_mobile/app/modules/ForgetPassword/Views/EnterEmail.dart';
+import 'package:demo_mobile/app/modules/Halaman_Utama/halamanutama_view.dart';
 import 'package:demo_mobile/app/modules/login/views/Registrasi_view.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ class _LoginViewState extends State<LoginView> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   bool isLoading = false;
+  bool isPasswordVisible = false;
 
   Future<void> loginUser() async {
     setState(() {
@@ -67,7 +69,7 @@ class _LoginViewState extends State<LoginView> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
               Image.asset(
-                'assets/images/cat.png', // Replace with your image path
+                'assets/images/cat.png',
                 width: 150,
                 height: 150,
               ),
@@ -99,17 +101,36 @@ class _LoginViewState extends State<LoginView> {
                   border: OutlineInputBorder(),
                   filled: true,
                   fillColor: Colors.white,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                      color: Colors.grey,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        isPasswordVisible = !isPasswordVisible;
+                      });
+                    },
+                  ),
                 ),
-                obscureText: true,
+                obscureText: !isPasswordVisible,
               ),
               SizedBox(height: 10),
               Align(
                 alignment: Alignment.centerRight,
-                child: Text(
-                  'Forget Password?',
-                  style: TextStyle(
-                    color: Colors.grey[700],
-                    fontWeight: FontWeight.w500,
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => EnterEmailView()),
+                    );
+                  },
+                  child: Text(
+                    'Forget Password?',
+                    style: TextStyle(
+                      color: Colors.grey[700],
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ),
@@ -120,7 +141,7 @@ class _LoginViewState extends State<LoginView> {
                       onPressed: loginUser,
                       style: ElevatedButton.styleFrom(
                         padding: EdgeInsets.symmetric(horizontal: 80, vertical: 15),
-                        iconColor: Colors.black, // Button color
+                        backgroundColor: Colors.black, // Button color
                       ),
                       child: Text(
                         'LOGIN',

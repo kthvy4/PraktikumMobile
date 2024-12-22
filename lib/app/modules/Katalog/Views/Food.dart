@@ -1,179 +1,303 @@
-import 'package:demo_mobile/app/modules/notifikasi/notification.dart';
+import 'package:demo_mobile/app/modules/Katalog/Views/detailProduk.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
-class CatFoodPage extends StatefulWidget {
+class CatalogPage extends StatefulWidget {
   @override
-  _CatFoodPageState createState() => _CatFoodPageState();
+  _CatalogPageState createState() => _CatalogPageState();
 }
 
-class _CatFoodPageState extends State<CatFoodPage> {
+class _CatalogPageState extends State<CatalogPage> {
+  String _username = "Loading...";
+  String _profileImageUrl = "";
+  String _searchQuery = "";
+  String _selectedCategory = "All"; // Default: Tampilkan semua kategori
+  List<String> _categories = ["All"]; // Untuk menyimpan daftar kategori
+
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final stt.SpeechToText _speech = stt.SpeechToText();
   final TextEditingController _searchController = TextEditingController();
-  late stt.SpeechToText _speech;
+
   bool _isListening = false;
+  List<QueryDocumentSnapshot> _catalogData = [];
+  List<QueryDocumentSnapshot> _filteredCatalogData = [];
 
   @override
   void initState() {
     super.initState();
-    _speech = stt.SpeechToText();
+    _fetchUserName();
+    _fetchCategories();
+    _fetchCatalogData();
+  }
+
+  Future<void> _fetchUserName() async {
+    try {
+      User? user = _auth.currentUser;
+      if (user != null) {
+        DocumentSnapshot snapshot =
+            await _firestore.collection('Profile').doc(user.uid).get();
+
+        if (snapshot.exists) {
+          setState(() {
+            _username = snapshot.get('Nama') ?? "User";
+            _profileImageUrl = snapshot.get('profileImageUrl') ?? "";
+          });
+        } else {
+          setState(() {
+            _username = "User not found";
+            _profileImageUrl = "";
+          });
+        }
+      }
+    } catch (e) {
+      print("Error fetching user data: $e");
+    }
+  }
+
+  Future<void> _fetchCategories() async {
+    try {
+      QuerySnapshot snapshot =
+          await _firestore.collection('products').get(); // Ambil data produk
+      Set<String> categories = {"All"}; // Tambahkan kategori default
+      for (var doc in snapshot.docs) {
+        String category = doc.get('category') ?? "Uncategorized";
+        categories.add(category); // Tambahkan kategori dari database
+      }
+      setState(() {
+        _categories = categories.toList(); // Konversi ke list
+      });
+    } catch (e) {
+      print("Error fetching categories: $e");
+    }
+  }
+
+  Future<void> _fetchCatalogData() async {
+    try {
+      QuerySnapshot snapshot = await _firestore.collection('products').get();
+      setState(() {
+        _catalogData = snapshot.docs;
+        _filteredCatalogData = _catalogData; // Awalnya semua data tampil
+      });
+    } catch (e) {
+      print("Error fetching catalog data: $e");
+    }
+  }
+
+  void _filterCatalog(String query, String category) {
+    setState(() {
+      if (query.isEmpty && (category == "All")) {
+        // Jika pencarian kosong dan kategori "All", tampilkan semua data
+        _filteredCatalogData = _catalogData;
+      } else {
+        _filteredCatalogData = _catalogData.where((doc) {
+          String productName = (doc.get('name') ?? "").toLowerCase();
+          String productCategory = (doc.get('category') ?? "Uncategorized");
+          bool matchesQuery = productName.contains(query.toLowerCase());
+          bool matchesCategory =
+              category == "All" || productCategory == category;
+          return matchesQuery && matchesCategory;
+        }).toList();
+      }
+    });
   }
 
   void _startListening() async {
-    bool available = await _speech.initialize();
+    bool available = await _speech.initialize(
+      onStatus: (status) => print("Status: $status"),
+      onError: (error) => print("Error: $error"),
+    );
     if (available) {
-      setState(() {
-        _isListening = true;
-      });
-      _speech.listen(onResult: (val) {
-        setState(() {
-          _searchController.text = val.recognizedWords;
-        });
-      });
+      setState(() => _isListening = true);
+      _speech.listen(
+        onResult: (result) {
+          setState(() {
+            _searchQuery = result.recognizedWords.trim();
+            _searchController.text = _searchQuery; // Update search bar
+            _filterCatalog(_searchQuery, _selectedCategory);
+          });
+        },
+      );
     }
   }
 
   void _stopListening() {
-    setState(() {
-      _isListening = false;
-    });
     _speech.stop();
+    setState(() => _isListening = false);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Colors.orange.shade100,
         title: Row(
           children: [
-            Icon(Icons.pets, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('wulan'),
-            Spacer(),
-            IconButton(
-              icon: Icon(Icons.notifications),
-              onPressed: () {
-                // Navigate to Notification Page
-                Navigator.push(context, MaterialPageRoute(builder: (_) => NotificationPage()));
-              },
+            CircleAvatar(
+              backgroundImage: _profileImageUrl.isNotEmpty
+                  ? NetworkImage(_profileImageUrl)
+                  : null,
+              child: _profileImageUrl.isEmpty
+                  ? Icon(Icons.person, color: Colors.orange)
+                  : null,
+              backgroundColor: Colors.white,
+            ),
+            SizedBox(width: 10),
+            Text(
+              _username,
+              style: TextStyle(color: Colors.black),
             ),
           ],
         ),
-        backgroundColor: Colors.orange[50],
-        elevation: 0,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.shopping_cart, color: Colors.black),
+            onPressed: () {
+              // Navigasi ke halaman keranjang
+              Navigator.pushNamed(context, '/cart');
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Need a food for your cat?',
-                prefixIcon: Icon(Icons.search),
-                suffixIcon: IconButton(
-                  icon: Icon(Icons.mic),
-                  onPressed: _isListening ? _stopListening : _startListening,
+            padding: const EdgeInsets.all(10.0),
+            child: Column(
+              children: [
+                TextField(
+                  controller: _searchController,
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                      _filterCatalog(value, _selectedCategory);
+                    });
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'Search for a product...',
+                    prefixIcon: Icon(Icons.search),
+                    suffixIcon: IconButton(
+                      icon: Icon(Icons.mic),
+                      onPressed: _isListening ? _stopListening : _startListening,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
                 ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(15.0),
+                SizedBox(height: 10),
+                // Tampilan kategori dengan dropdown
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: _categories.map((category) {
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _selectedCategory = category;
+                            _filterCatalog(_searchQuery, _selectedCategory);
+                          });
+                        },
+                        child: Container(
+                          margin: EdgeInsets.symmetric(horizontal: 8),
+                          padding: EdgeInsets.symmetric(
+                              vertical: 10, horizontal: 20),
+                          decoration: BoxDecoration(
+                            color: _selectedCategory == category
+                                ? Colors.orange
+                                : Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            category,
+                            style: TextStyle(
+                              color: _selectedCategory == category
+                                  ? Colors.white
+                                  : Colors.black,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
                 ),
-                filled: true,
-                fillColor: Colors.orange[50],
-              ),
+              ],
             ),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              CategoryButton(label: 'Food'),
-              CategoryButton(label: 'Accessories'),
-              CategoryButton(label: 'Care'),
-              CategoryButton(label: 'Health'),
-            ],
           ),
           Expanded(
-            child: StreamBuilder(
-              stream: FirebaseFirestore.instance.collection('cat_foods').snapshots(),
-              builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
-                if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
-                return ListView.builder(
-                  itemCount: snapshot.data!.docs.length,
-                  itemBuilder: (context, index) {
-                    var catFood = snapshot.data!.docs[index];
-                    return ListTile(
-                      leading: Image.network(catFood['imageUrl'], width: 50, height: 50),
-                      title: Text(catFood['name'], style: TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('Starting from ${catFood['price']}/KG\n${catFood['description']}'),
-                      onTap: () {
-                        // Navigate to Detail Page
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => DetailPage(catFood: catFood)),
-                        );
-                      },
-                    );
-                  },
-                );
-              },
-            ),
+            child: _filteredCatalogData.isEmpty
+                ? Center(child: Text("No products found."))
+                : ListView.builder(
+                    itemCount: _filteredCatalogData.length,
+                    itemBuilder: (context, index) {
+                      final product = _filteredCatalogData[index];
+                      final productId = product.id; // Ambil ID produk
+                      return Card(
+                        child: ListTile(
+                          leading: Image.network(product['imageUrl']),
+                          title: Text(product['name']),
+                          subtitle:
+                              Text('Starting from \$${product['price']}'),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ProductDetailPage(
+                                  productId: productId, // Kirimkan productId
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
-        items: [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.article), label: 'Article'),
-          BottomNavigationBarItem(icon: Icon(Icons.shopping_bag), label: 'Shopping'),
-          BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Cart'),
+        items: const <BottomNavigationBarItem>[
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            backgroundColor: Colors.black,
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.article),
+            backgroundColor: Colors.black,
+            label: 'Article',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.shopping_cart),
+            backgroundColor: Colors.black,
+            label: 'Shopping',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            backgroundColor: Colors.black,
+            label: 'Profile',
+          ),
         ],
-      ),
-    );
-  }
-}
-
-class CategoryButton extends StatelessWidget {
-  final String label;
-
-  CategoryButton({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return TextButton(
-      onPressed: () {},
-      style: TextButton.styleFrom(
-        backgroundColor: Colors.orange[100],
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10.0),
-        ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(color: Colors.black),
-      ),
-    );
-  }
-}
-
-class DetailPage extends StatelessWidget {
-  final QueryDocumentSnapshot catFood;
-
-  DetailPage({required this.catFood});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(catFood['name']),
-      ),
-      body: Column(
-        children: [
-          Image.network(catFood['imageUrl']),
-          Text(catFood['name'], style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          Text(catFood['description']),
-          Text('Price: ${catFood['price']}/KG'),
-          // Add other details and purchase options here
-        ],
+        currentIndex: 2, // Current page index
+        onTap: (index) {
+          switch (index) {
+            case 0:
+              Navigator.pushNamed(context, '/home');
+              break;
+            case 1:
+              Navigator.pushNamed(context, '/articles');
+              break;
+            case 2:
+              // Shooping
+              break;
+            case 3:
+              Navigator.pushNamed(context, '/profiles');
+              break;
+          }
+        },
       ),
     );
   }

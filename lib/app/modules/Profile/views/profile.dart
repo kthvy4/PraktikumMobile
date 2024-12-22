@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileView extends StatefulWidget {
   @override
@@ -18,27 +19,33 @@ class _ProfileViewState extends State<ProfileView> {
   String? _profileImageUrl;
   bool _isLoading = true;
 
-  Future<void> _fetchUserData() async {
-    try {
-      User? user = _auth.currentUser;
-      if (user != null) {
-        DocumentSnapshot userDoc = await _firestore.collection('Profile').doc(user.uid).get();
-        setState(() {
-          _name = userDoc['Nama'] ?? 'Nama tidak tersedia';
-          _email = userDoc['Email'] ?? 'Email tidak tersedia';
-          _phone = userDoc['No telepon'] ?? 'Nomor tidak tersedia';
-          _address = userDoc['alamat'] ?? 'Alamat tidak tersedia';
-          _profileImageUrl = userDoc['profileImageUrl'];
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      print('Error fetching user data: $e');
+Future<void> _fetchUserData() async {
+  try {
+    User? user = _auth.currentUser;
+    if (user != null) {
+      DocumentSnapshot userDoc = await _firestore.collection('Profile').doc(user.uid).get();
       setState(() {
+        _name = userDoc['Nama'] ?? 'Nama tidak tersedia';
+        _email = userDoc['Email'] ?? 'Email tidak tersedia';
+        _phone = userDoc['No telepon'] ?? 'Nomor tidak tersedia';
+        _address = userDoc['alamat'] ?? 'Alamat tidak tersedia'; // Perbarui alamat dari Firestore
+        _profileImageUrl = userDoc['profileImageUrl'];
+        _isLoading = false;
+      });
+    } else {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      setState(() {
+        _address = prefs.getString('alamat') ?? 'Alamat tidak tersedia';
         _isLoading = false;
       });
     }
+  } catch (e) {
+    print('Error fetching user data: $e');
+    setState(() {
+      _isLoading = false;
+    });
   }
+}
 
   Future<void> _deleteProfile() async {
     try {
